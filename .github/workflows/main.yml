@@ -1,0 +1,57 @@
+name: AkustikISG APK Derle
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dosyalari Al
+        uses: actions/checkout@v4
+
+      - name: Java 17 Kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Flutter Kur
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Projeyi Hazirla ve Paketleri Ekle
+        run: |
+          flutter create --org com.akustikisg --project-name akustik_isg build_app
+          cp main.dart build_app/lib/main.dart
+          cd build_app
+          flutter pub add noise_meter permission_handler image_picker sensors_plus shared_preferences
+
+      - name: Android Izin ve SDK Ayarla
+        run: |
+          python3 << 'EOF'
+          import os, re
+          m_path = "build_app/android/app/src/main/AndroidManifest.xml"
+          m = open(m_path, encoding="utf-8").read()
+          m = m.replace("<application", '<uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <application', 1)
+          m = m.replace('android:label="akustik_isg"', 'android:label="AkustikISG"', 1)
+          open(m_path, "w", encoding="utf-8").write(m)
+          for g_path in ["build_app/android/app/build.gradle.kts", "build_app/android/app/build.gradle"]:
+              if os.path.exists(g_path):
+                  g = open(g_path, encoding="utf-8").read()
+                  g = re.sub(r"minSdk\s*=\s*[^\n]+", "minSdk = 24", g)
+                  g = re.sub(r"minSdkVersion\s+[^\n]+", "minSdkVersion 24", g)
+                  open(g_path, "w", encoding="utf-8").write(g)
+          EOF
+
+      - name: APK Derle
+        working-directory: build_app
+        run: flutter build apk --release
+
+      - name: APK Dosyasini Indirmeye Hazirla
+        uses: actions/upload-artifact@v4
+        with:
+          name: akustik-isg-apk
+          path: build_app/build/app/outputs/flutter-apk/app-release.apk
